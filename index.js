@@ -19,6 +19,65 @@ const dbConfig = {
 
 let db;
 
+// Replace the existing DB init function with a resilient one:
+async function initDB() {
+	// read from env (CI sets these when running the container)
+	const DB_HOST = process.env.DB_HOST || 'localhost';
+	const DB_USER = process.env.DB_USER || 'root';
+	const DB_PASSWORD = process.env.DB_PASSWORD || 'password';
+	const DB_NAME = process.env.DB_NAME || 'notes_app';
+
+	const mysql = require('mysql2/promise');
+
+	const maxRetries = 30;
+	const retryDelayMs = 2000;
+
+	const delay = (ms) => new Promise(res => setTimeout(res, ms));
+
+	let attempt = 0;
+	while (attempt < maxRetries) {
+		attempt++;
+		try {
+			console.log(`DB: attempting connection to ${DB_HOST} (attempt ${attempt}/${maxRetries})`);
+			// try a single connection to verify DB is accepting connections
+			const conn = await mysql.createConnection({
+				host: DB_HOST,
+				user: DB_USER,
+				password: DB_PASSWORD,
+				database: DB_NAME,
+				connectTimeout: 5000
+			});
+			// quick test query
+			await conn.execute('SELECT 1');
+			// if needed elsewhere, you can keep a pool; adapt to your previous code
+			// e.g. module.exports.db = conn; or create a pool:
+			try { await conn.end(); } catch (e) { /* ignore */ }
+
+			console.log('DB: connection successful');
+			// create pool for app usage if original code expects it
+			const pool = mysql.createPool({
+				host: DB_HOST,
+				user: DB_USER,
+				password: DB_PASSWORD,
+				database: DB_NAME,
+				waitForConnections: true,
+				connectionLimit: 10,
+				queueLimit: 0
+			});
+			// export/set globally so other modules can import/use it if expected
+			global.dbPool = pool;
+			return pool;
+		} catch (err) {
+			console.warn(`DB: connection failed (attempt ${attempt}): ${err.code || err.message}`);
+			if (attempt >= maxRetries) {
+				console.error('DB: exhausted retries, giving up.');
+				throw err;
+			}
+			await delay(retryDelayMs);
+		}
+	}
+}
+
 // Initialize database connection
 async function initDB() {
   try {
@@ -205,10 +264,15 @@ app.get("/health", (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
-  await initDB();
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+	try {
+		await initDB();
+		app.listen(PORT, () => {
+			console.log(`Server running on port ${PORT}`);
+		});
+	} catch (err) {
+		console.error('Failed to initialize DB, exiting:', err);
+		process.exit(1);
+	}
 }
 
 startServer();
