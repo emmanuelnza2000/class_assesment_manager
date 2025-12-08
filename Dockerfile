@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (including dev for native module compilation)
+RUN npm ci
 
 # Production stage
 FROM node:18-alpine AS production
@@ -15,6 +15,9 @@ FROM node:18-alpine AS production
 # Add non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nextjs -u 1001
+
+# Install build tools required for native modules like bcrypt
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
