@@ -23,24 +23,24 @@
     const id = params.get("id");
 
     async function loadNote() {
-      const res = await fetch("/api/notes");
+      const res = await fetch("/api/assessments");  // Changed from /api/notes
       const notes = await res.json();
       const note = notes.find(n => n.id == id);
 
       document.getElementById("title").value = note.title;
-      document.getElementById("content").value = note.content;
+      document.getElementById("content").value = note.description;  // Changed from note.content
     }
 
     document.getElementById("editForm").addEventListener("submit", async (e) => {
       e.preventDefault();
 
       const title = document.getElementById("title").value;
-      const content = document.getElementById("content").value;
+      const description = document.getElementById("content").value;  // Changed variable name
 
-      await fetch(`/api/notes/${id}`, {
+      await fetch(`/api/assessments/${id}`, {  // Changed from /api/notes
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content })
+        body: JSON.stringify({ title, description })  // Changed from content
       });
 
       alert("Assessment updated!");

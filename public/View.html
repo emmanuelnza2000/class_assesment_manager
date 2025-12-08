@@ -15,7 +15,7 @@
       const urlParams = new URLSearchParams(window.location.search);
       const id = urlParams.get('id');
 
-      const res = await fetch(`/api/notes`);
+      const res = await fetch(`/api/assessments`);  // Changed from /api/notes
       const notes = await res.json();
       const note = notes.find(n => n.id == id);
 
@@ -23,7 +23,7 @@
 
       document.getElementById("details").innerHTML = `
         <h2>${note.title}</h2>
-        <p>${note.content}</p>
+        <p>${note.description}</p>  <!-- Changed from note.content -->
         <button onclick="location.href='edit.html?id=${id}'">Edit</button>
         <button onclick="deleteNote(${id})">Delete</button>
       `;
@@ -31,7 +31,7 @@
 
     async function deleteNote(id) {
       if (confirm("Delete this assessment?")) {
-        await fetch(`/api/notes/${id}`, { method: "DELETE" });
+        await fetch(`/api/assessments/${id}`, { method: "DELETE" });  <!-- Changed from /api/notes -->
         alert("Assessment deleted");
         location.href = "index.html";
       }
