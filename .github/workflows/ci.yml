@@ -59,9 +59,42 @@ jobs:
 
     - name: Test Docker Container (Health Check)
       run: |
-        docker run -d --name test-container -p 3000:3000 classroom_manager:${{ github.sha }}
-        sleep 10
-        curl -f http://localhost:3000/health || exit 1
+        # start container
+        docker run -d --name test-container -p 3000:3000 classroom_manager:${{ github.sha }} || {
+          echo "docker run failed; dumping logs (if any)";
+          docker logs test-container || true;
+          docker ps -a || true;
+          exit 1;
+        }
+
+        echo "Waiting for container to accept connections on http://localhost:3000/health ..."
+        max_retries=20
+        attempt=0
+        success=0
+
+        while [ $attempt -lt $max_retries ]; do
+          attempt=$((attempt+1))
+          echo "Attempt $attempt/$max_retries..."
+          if curl -sSf --max-time 2 http://localhost:3000/health >/dev/null 2>&1; then
+            echo "Health endpoint responded."
+            success=1
+            break
+          fi
+          sleep 2
+        done
+
+        if [ $success -ne 1 ]; then
+          echo "Health endpoint did not respond after $max_retries attempts."
+          echo "Container status:"
+          docker ps -a --filter "name=test-container"
+          echo "Container logs:"
+          docker logs test-container || true
+          docker stop test-container || true
+          docker rm test-container || true
+          exit 1
+        fi
+
+        # cleanup
         docker stop test-container
         docker rm test-container
 
