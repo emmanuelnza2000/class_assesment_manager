@@ -59,16 +59,50 @@ jobs:
 
     - name: Test Docker Container (Health Check)
       run: |
-        # start container
-        docker run -d --name test-container -p 3000:3000 classroom_manager:${{ github.sha }} || {
-          echo "docker run failed; dumping logs (if any)";
-          docker logs test-container || true;
-          docker ps -a || true;
-          exit 1;
+        set -euo pipefail
+
+        echo "Starting temporary MySQL for container under test..."
+        docker run -d --name ci-mysql -e MYSQL_ROOT_PASSWORD=password -e MYSQL_DATABASE=notes_app mysql:8.0 || {
+          echo "Failed to start MySQL container"; docker ps -a; exit 1;
+        }
+
+        echo "Waiting for MySQL to be healthy..."
+        max_retries=30
+        attempt=0
+        mysql_ready=0
+        while [ $attempt -lt $max_retries ]; do
+          attempt=$((attempt+1))
+          if docker exec ci-mysql mysqladmin ping -ppassword --silent >/dev/null 2>&1; then
+            mysql_ready=1
+            echo "MySQL is ready (attempt $attempt)"
+            break
+          fi
+          echo "MySQL not ready yet (attempt $attempt/$max_retries)..."
+          sleep 2
+        done
+
+        if [ $mysql_ready -ne 1 ]; then
+          echo "MySQL did not become ready in time. Dumping logs:"
+          docker logs ci-mysql || true
+          docker ps -a || true
+          docker rm -f ci-mysql || true
+          exit 1
+        fi
+
+        echo "Building & starting app container..."
+        docker run -d --name test-container --link ci-mysql:mysql \
+          -e DB_HOST=ci-mysql -e DB_USER=root -e DB_PASSWORD=password -e DB_NAME=notes_app \
+          -p 3000:3000 classroom_manager:${{ github.sha }} || {
+            echo "docker run failed; dumping logs (if any)";
+            docker logs test-container || true;
+            docker ps -a || true;
+            docker rm -f test-container || true;
+            docker rm -f ci-mysql || true;
+            exit 1;
         }
 
         echo "Waiting for container to accept connections on http://localhost:3000/health ..."
-        max_retries=20
+        max_retries=30
         attempt=0
         success=0
 
@@ -85,18 +119,22 @@ jobs:
 
         if [ $success -ne 1 ]; then
           echo "Health endpoint did not respond after $max_retries attempts."
-          echo "Container status:"
-          docker ps -a --filter "name=test-container"
-          echo "Container logs:"
+          echo "=== APP container status ==="
+          docker ps -a --filter "name=test-container" || true
+          echo "=== APP container logs ==="
           docker logs test-container || true
-          docker stop test-container || true
-          docker rm test-container || true
+          echo "=== MYSQL container logs ==="
+          docker logs ci-mysql || true
+          docker rm -f test-container || true
+          docker rm -f ci-mysql || true
           exit 1
         fi
 
-        # cleanup
-        docker stop test-container
-        docker rm test-container
+        echo "Health check passed. Cleaning up..."
+        docker stop test-container || true
+        docker rm test-container || true
+        docker stop ci-mysql || true
+        docker rm ci-mysql || true
 
   deploy:
     needs: build
