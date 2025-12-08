@@ -19,63 +19,49 @@ const dbConfig = {
 
 let db;
 
-// Replace the existing DB init function with a resilient one:
-async function initDB() {
-	// read from env (CI sets these when running the container)
-	const DB_HOST = process.env.DB_HOST || 'localhost';
-	const DB_USER = process.env.DB_USER || 'root';
-	const DB_PASSWORD = process.env.DB_PASSWORD || 'password';
-	const DB_NAME = process.env.DB_NAME || 'notes_app';
+/* Replace the existing DB init and startup logic with the resilient version below */
+async function initDBWithRetries({
+  host = process.env.DB_HOST || 'localhost',
+  user = process.env.DB_USER || 'root',
+  password = process.env.DB_PASSWORD || 'password',
+  database = process.env.DB_NAME || 'notes_app',
+  maxRetries = 30,
+  retryDelayMs = 2000
+} = {}) {
+  const delay = ms => new Promise(r => setTimeout(r, ms));
 
-	const mysql = require('mysql2/promise');
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`DB: attempting connection to ${host} (attempt ${attempt}/${maxRetries})`);
+      // quick connect test
+      const conn = await mysql.createConnection({
+        host, user, password, database,
+        connectTimeout: 5000
+      });
+      await conn.execute('SELECT 1');
+      await conn.end();
 
-	const maxRetries = 30;
-	const retryDelayMs = 2000;
+      console.log('DB: connection successful, creating pool');
+      const pool = mysql.createPool({
+        host, user, password, database,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0
+      });
 
-	const delay = (ms) => new Promise(res => setTimeout(res, ms));
-
-	let attempt = 0;
-	while (attempt < maxRetries) {
-		attempt++;
-		try {
-			console.log(`DB: attempting connection to ${DB_HOST} (attempt ${attempt}/${maxRetries})`);
-			// try a single connection to verify DB is accepting connections
-			const conn = await mysql.createConnection({
-				host: DB_HOST,
-				user: DB_USER,
-				password: DB_PASSWORD,
-				database: DB_NAME,
-				connectTimeout: 5000
-			});
-			// quick test query
-			await conn.execute('SELECT 1');
-			// if needed elsewhere, you can keep a pool; adapt to your previous code
-			// e.g. module.exports.db = conn; or create a pool:
-			try { await conn.end(); } catch (e) { /* ignore */ }
-
-			console.log('DB: connection successful');
-			// create pool for app usage if original code expects it
-			const pool = mysql.createPool({
-				host: DB_HOST,
-				user: DB_USER,
-				password: DB_PASSWORD,
-				database: DB_NAME,
-				waitForConnections: true,
-				connectionLimit: 10,
-				queueLimit: 0
-			});
-			// export/set globally so other modules can import/use it if expected
-			global.dbPool = pool;
-			return pool;
-		} catch (err) {
-			console.warn(`DB: connection failed (attempt ${attempt}): ${err.code || err.message}`);
-			if (attempt >= maxRetries) {
-				console.error('DB: exhausted retries, giving up.');
-				throw err;
-			}
-			await delay(retryDelayMs);
-		}
-	}
+      // expose pool for other modules if needed
+      module.exports.dbPool = pool;
+      global.dbPool = pool;
+      return pool;
+    } catch (err) {
+      console.warn(`DB: connection attempt ${attempt} failed: ${err && (err.code || err.message)}`);
+      if (attempt === maxRetries) {
+        console.error('DB: exhausted retries, throwing error');
+        throw err;
+      }
+      await delay(retryDelayMs);
+    }
+  }
 }
 
 // Initialize database connection
@@ -263,16 +249,18 @@ app.get("/health", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
+// Ensure server start waits for DB
 async function startServer() {
-	try {
-		await initDB();
-		app.listen(PORT, () => {
-			console.log(`Server running on port ${PORT}`);
-		});
-	} catch (err) {
-		console.error('Failed to initialize DB, exiting:', err);
-		process.exit(1);
-	}
+  try {
+    await initDBWithRetries();
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error('Failed to initialize DB after retries, exiting. Error:', err && err.message);
+    process.exit(1);
+  }
 }
 
+// call startServer (keep existing behavior)
 startServer();
