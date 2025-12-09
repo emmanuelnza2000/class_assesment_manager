@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: classroom-manager-{{COLOR}}
+  labels:
+    app: classroom-manager
+    color: "{{COLOR}}"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: classroom-manager
+      color: "{{COLOR}}"
+  template:
+    metadata:
+      labels:
+        app: classroom-manager
+        color: "{{COLOR}}"
+    spec:
+      containers:
+        - name: app
+          image: "{{IMAGE}}:{{TAG}}"
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

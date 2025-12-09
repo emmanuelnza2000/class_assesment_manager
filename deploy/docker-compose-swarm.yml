@@ -1,0 +1,26 @@
+version: "3.8"
+services:
+  classroom-manager:
+    image: "{{IMAGE}}:{{TAG}}"
+    ports:
+      - "3000:3000"
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+    environment:
+      - DB_HOST=ci-mysql
+      - DB_USER=root
+      - DB_PASSWORD=password
+      - DB_NAME=notes_app

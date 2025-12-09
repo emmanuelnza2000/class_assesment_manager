@@ -140,16 +140,107 @@ jobs:
         docker rm ci-mysql || true
 
   deploy:
-    needs: build
+    needs: release
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-
+    environment: production
+    env:
+      # fallback defaults; release job sets IMAGE if registry configured
+      DEPLOY_TARGET: ${{ secrets.DEPLOY_TARGET || 'kubernetes' }}
+      USE_BLUE_GREEN: ${{ secrets.USE_BLUE_GREEN || 'false' }}
+      DEFAULT_REPLICAS: 3
     steps:
-    - name: Deploy to Staging
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Read tag and image
+      id: meta
       run: |
-        echo " Deploying Classroom Assessment Manager to Staging..."
-        # scp, rsync, SSH, render.com, vercel, AWS, etc
-        # Add deployment logic here
+        TAG=$(node -e "console.log(require('./package.json').version ? 'v'+require('./package.json').version : process.env.GITHUB_SHA)")
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        # IMAGE may have been written in release job; fallback to repo image name (not pushed)
+        IMAGE="${{ secrets.DOCKERHUB_USERNAME:-}}/classroom_manager"
+        echo "image=$IMAGE" >> $GITHUB_OUTPUT
+
+    - name: Compute resource recommendations
+      id: resources
+      run: |
+        chmod +x deploy/calc-resources.sh
+        # pass desired concurrency via secret or use default
+        RECOMMEND=$(./deploy/calc-resources.sh --replicas ${DEFAULT_REPLICAS} --concurrency ${REPLICAS_CONCURRENCY:-50})
+        echo "${RECOMMEND}" > resources.json
+        echo "resources=$(cat resources.json | jq -c .)" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Deploy (Kubernetes or Swarm)
+      env:
+        TAG: ${{ steps.meta.outputs.tag }}
+        IMAGE: ${{ steps.meta.outputs.image }}
+        KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG }}
+        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+        DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        DEPLOY_TARGET: ${{ env.DEPLOY_TARGET }}
+        USE_BLUE_GREEN: ${{ env.USE_BLUE_GREEN }}
+      run: |
+        set -euo pipefail
+
+        echo "Deploy target: ${DEPLOY_TARGET}"
+
+        if [ "${DEPLOY_TARGET}" = "kubernetes" ]; then
+          if [ -z "${KUBE_CONFIG_B64:-}" ]; then
+            echo "No KUBE_CONFIG provided; aborting k8s deploy."
+            exit 0
+          fi
+
+          echo "Writing kubeconfig..."
+          echo "${KUBE_CONFIG_B64}" | base64 --decode > kubeconfig
+          export KUBECONFIG=$PWD/kubeconfig
+
+          echo "Substituting image tag into k8s manifests and applying"
+          # Replace placeholders in manifests (simple sed)
+          sed -e "s|{{IMAGE}}|${IMAGE}|g" -e "s|{{TAG}}|${TAG}|g" deploy/k8s/deployment.yaml > /tmp/deployment.yaml
+          kubectl apply -f /tmp/deployment.yaml
+          kubectl apply -f deploy/k8s/service.yaml
+
+          if [ "${USE_BLUE_GREEN}" = "true" ]; then
+            echo "Performing blue-green deployment..."
+            # blue-green script: create new deployment with label version=green and switch service selector
+            NEW_COLOR=$(kubectl get deploy -l app=classroom-manager -o jsonpath='{.items[0].metadata.labels.color}' 2>/dev/null || echo "green")
+            if [ "${NEW_COLOR}" = "blue" ]; then NEW_COLOR="green"; else NEW_COLOR="blue"; fi
+            echo "New color: ${NEW_COLOR}"
+            sed -e "s|{{IMAGE}}|${IMAGE}|g" -e "s|{{TAG}}|${TAG}|g" -e "s|{{COLOR}}|${NEW_COLOR}|g" deploy/k8s/blue-green-deployment.yaml > /tmp/blue-green.yaml
+            kubectl apply -f /tmp/blue-green.yaml
+            kubectl rollout status deployment/classroom-manager-${NEW_COLOR} --timeout=120s
+            # switch service selector to new color
+            kubectl patch service classroom-manager -p "{\"spec\":{\"selector\":{\"app\":\"classroom-manager\",\"color\":\"${NEW_COLOR}\"}}}"
+            echo "Service switched to ${NEW_COLOR} deployment."
+            # optionally remove old color after verification
+          else
+            echo "Performing rolling update (default k8s strategy)"
+            kubectl rollout status deployment/classroom-manager --timeout=120s
+          fi
+
+        elif [ "${DEPLOY_TARGET}" = "swarm" ]; then
+          echo "Deploying to Docker Swarm via docker stack"
+          # login if registry credentials present
+          if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
+            echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+          elif [ -n "${DOCKER_USERNAME:-}" ] && [ -n "${DOCKER_PASSWORD:-}" ]; then
+            echo "${DOCKER_PASSWORD}" | docker login "${DOCKER_REGISTRY}" -u "${DOCKER_USERNAME}" --password-stdin
+          fi
+          # substitute image:tag into compose and deploy
+          sed -e "s|{{IMAGE}}|${IMAGE}|g" -e "s|{{TAG}}|${TAG}|g" deploy/docker-compose-swarm.yml > /tmp/stack.yml
+          docker stack deploy -c /tmp/stack.yml classroom_manager --with-registry-auth
+          # wait for services to stabilize
+          docker service ls --filter name=classroom_manager || true
+        else
+          echo "Unknown DEPLOY_TARGET=${DEPLOY_TARGET}; skipping"
+        fi
+      shell: bash
 
   release:
     needs: build
