@@ -156,11 +156,17 @@ jobs:
 
     - name: Read tag and image
       id: meta
+      env:
+        DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       run: |
         TAG=$(node -e "console.log(require('./package.json').version ? 'v'+require('./package.json').version : process.env.GITHUB_SHA)")
         echo "tag=$TAG" >> $GITHUB_OUTPUT
-        # IMAGE may have been written in release job; fallback to repo image name (not pushed)
-        IMAGE="${{ secrets.DOCKERHUB_USERNAME:-}}/classroom_manager"
+        # Determine IMAGE using the provided secret (if any)
+        if [ -n "${DOCKERHUB_USERNAME:-}" ]; then
+          IMAGE="${DOCKERHUB_USERNAME}/classroom_manager"
+        else
+          IMAGE="classroom_manager"
+        fi
         echo "image=$IMAGE" >> $GITHUB_OUTPUT
 
     - name: Compute resource recommendations
