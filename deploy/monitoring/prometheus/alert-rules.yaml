@@ -1,0 +1,30 @@
+groups:
+  - name: classroom-manager.rules
+    rules:
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus appears down"
+          description: "Prometheus scrape target 'prometheus' is down for > 2m."
+
+      - alert: HighContainerRestarts
+        expr: increase(kube_pod_container_status_restarts_total[15m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container restarts high"
+          description: "More than 5 restarts in 15m across pods."
+
+      - alert: High5xxErrorRate
+        # Requires your application to expose http_requests_total{code=~"5.."} or similar
+        expr: rate(http_requests_total{code=~"5.."}[5m]) / rate(http_requests_total[code!~"5.."][5m] + http_requests_total{code=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High 5xx error rate"
+          description: "5xx error rate > 5% over the last 5m (requires app instrumentation)."

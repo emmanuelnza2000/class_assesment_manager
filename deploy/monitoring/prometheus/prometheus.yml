@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "classroom-manager"
+    metrics_path: /metrics
+    # For k8s use service DNS (service maps 80->3000). If you expose a /metrics endpoint, Prometheus will scrape it.
+    static_configs:
+      - targets: ["classroom-manager:80"]
+
+  # kube-system / node exporters can be added when available

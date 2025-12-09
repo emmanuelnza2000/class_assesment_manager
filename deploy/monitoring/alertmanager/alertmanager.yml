@@ -1,0 +1,9 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: "default"
+receivers:
+  - name: "default"
+    # Configure actual integrations here (slack_configs, email_configs, pagerduty_configs)
+    webhook_configs:
+      - url: "http://localhost:9001/"  # placeholder; replace with real receiver or remove

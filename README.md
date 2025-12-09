@@ -221,6 +221,37 @@ If no Docker secrets are configured the workflow will skip Docker login/build/pu
 - Memory and CPU usage
 - Error rates and logging
 
+## Monitoring & Logging
+
+This repository includes optional manifests to deploy a basic monitoring and logging stack into a Kubernetes cluster under the `monitoring` namespace.
+
+What is included:
+- Prometheus (scrapes /metrics on `classroom-manager:80` and itself)
+  - Config: deploy/monitoring/prometheus/prometheus.yml
+  - K8s manifests: deploy/monitoring/prometheus/k8s-prometheus.yaml
+  - Alert rules: deploy/monitoring/prometheus/alert-rules.yaml
+- Alertmanager (simple receiver; configure real receivers): deploy/monitoring/alertmanager/*
+- Grafana (preconfigured Prometheus datasource): deploy/monitoring/grafana/k8s-grafana.yaml
+- Fluentd DaemonSet to forward container logs to Elasticsearch: deploy/logging/fluentd/*
+
+Quick deploy (example):
+1. kubectl apply -f deploy/monitoring/prometheus/k8s-prometheus.yaml
+2. kubectl apply -f deploy/monitoring/alertmanager/k8s-alertmanager.yaml
+3. kubectl apply -f deploy/monitoring/prometheus/alert-rules.yaml (or mount into Prometheus)
+4. kubectl apply -f deploy/monitoring/grafana/k8s-grafana.yaml
+5. Provide & configure Elasticsearch and then:
+   kubectl apply -f deploy/logging/fluentd/fluentd-configmap.yaml
+   kubectl apply -f deploy/logging/fluentd/k8s-fluentd-daemonset.yaml
+
+Alerting notes:
+- `High5xxErrorRate` alert requires your application to expose Prometheus metrics such as `http_requests_total` with HTTP status label.
+- Error budget alerts: define SLOs in Prometheus recording rules (not included here). Example: SLO = 99.9% successful requests over 30d; alert when burn rate exceeds threshold.
+- Configure Alertmanager receivers (email, Slack, PagerDuty) in deploy/monitoring/alertmanager/alertmanager.yml.
+
+Secrets / production:
+- Use Kubernetes Secrets for Grafana admin password and Elasticsearch credentials.
+- Adjust resource requests/limits in the manifests for your environment.
+
 ## 📋 Error Budget Policy
 
 ### Service Level Objectives (SLOs):
