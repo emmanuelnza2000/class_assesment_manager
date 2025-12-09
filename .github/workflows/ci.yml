@@ -186,7 +186,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${TAG}" -m "Release ${TAG}"
-          # Push using token-authenticated URL to ensure permission to push tags
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${TAG}"
           echo "Created and pushed tag ${TAG}."
         fi
@@ -194,27 +193,30 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
-    - name: Login to Docker registry
+    - name: Login to Docker registry (optional)
+      id: docker-login
       run: |
-        # Support Docker Hub (DOCKERHUB_USERNAME + DOCKERHUB_TOKEN)
-        # or generic registry (DOCKER_REGISTRY + DOCKER_USERNAME + DOCKER_PASSWORD)
+        IMAGE=""
         if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
           echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-          export IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/classroom_manager"
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/classroom_manager"
         elif [ -n "${{ secrets.DOCKER_USERNAME }}" ] && [ -n "${{ secrets.DOCKER_PASSWORD }}" ] && [ -n "${{ secrets.DOCKER_REGISTRY }}" ]; then
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login "${{ secrets.DOCKER_REGISTRY }}" -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-          export IMAGE="${{ secrets.DOCKER_REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/classroom_manager"
+          IMAGE="${{ secrets.DOCKER_REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/classroom_manager"
         else
-          echo "No Docker credentials provided. Set DOCKERHUB_USERNAME/DOCKERHUB_TOKEN or DOCKER_REGISTRY/DOCKER_USERNAME/DOCKER_PASSWORD in repo secrets."
-          exit 1
+          echo "No Docker credentials provided; skipping docker build/push. To enable publishing set DOCKERHUB_USERNAME/DOCKERHUB_TOKEN or DOCKER_REGISTRY/DOCKER_USERNAME/DOCKER_PASSWORD in repo secrets."
         fi
         echo "IMAGE=${IMAGE}" >> $GITHUB_ENV
 
-    - name: Build and push Docker image (tagged)
+    - name: Build and push Docker image (tagged) — skipped if no creds
       env:
         TAG: ${{ steps.tag.outputs.tag }}
         IMAGE: ${{ env.IMAGE }}
       run: |
+        if [ -z "${IMAGE}" ]; then
+          echo "No IMAGE configured; skipping Docker build & push."
+          exit 0
+        fi
         echo "Building image ${IMAGE}:${TAG} and ${IMAGE}:latest"
         docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" .
         docker push "${IMAGE}:${TAG}"

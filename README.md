@@ -187,6 +187,18 @@ docker-compose up -d
 - Pull requests to `main`
 - Manual workflow dispatch
 
+## CI / Releases
+
+The GitHub Actions workflow will create a git tag and GitHub Release for the version in package.json on pushes to `main`. Docker image publishing is optional and disabled by default.
+
+To enable Docker image publish (release job will build & push):
+- For Docker Hub:
+  - Add repository secrets: `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (or password).
+- For a private registry:
+  - Add repository secrets: `DOCKER_REGISTRY`, `DOCKER_USERNAME`, `DOCKER_PASSWORD`.
+
+If no Docker secrets are configured the workflow will skip Docker login/build/push but will still create the git tag and GitHub release.
+
 ## 📊 Monitoring & Health Checks
 
 ### Health Check Endpoint: `/health`
