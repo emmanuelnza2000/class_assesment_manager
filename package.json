@@ -8,9 +8,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "lint": "eslint . || true",
-    "test": "jest --runInBand",
-    "test:unit": "jest tests/unit --runInBand",
-    "test:integration": "jest tests/integration --runInBand"
+    "test": "jest --runInBand"
   },
   "keywords": [],
   "author": "",
