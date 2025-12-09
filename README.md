@@ -336,3 +336,25 @@ For issues and questions:
 **Built with ❤️ for DevOps learning and demonstration**
 
 Last updated: January 2024
+
+# Classroom Assessment Manager
+
+Quick notes:
+- CI runs tests, lints and builds a Docker image.
+- Release job reads version from package.json, tags the repo and (optionally) pushes Docker images.
+- Deploy job can apply Kubernetes manifests or deploy a Docker Swarm stack and supports rolling updates or blue-green (set via secrets).
+
+Required repository secrets (optional for full automation):
+- GITHUB_TOKEN (provided by Actions)
+- For Docker publishing (optional):
+  - DOCKERHUB_USERNAME and DOCKERHUB_TOKEN
+  - OR DOCKER_REGISTRY, DOCKER_USERNAME and DOCKER_PASSWORD
+- For Kubernetes deploy:
+  - KUBE_CONFIG (base64-encoded kubeconfig)
+  - Optionally USE_BLUE_GREEN=true to enable blue/green switching
+- For Swarm deploy:
+  - Ensure the runner can reach the Swarm manager; use DOCKER_HOST / DOCKER_TLS_* if needed.
+
+Usage:
+- Update package.json version, push to `main` — the workflow will create a tag `v<version>` and a GitHub release.
+- To enable Docker image publish, add Docker secrets above.
