@@ -15,25 +15,27 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Heuristics:
-# base memory per instance (Mi)
-BASE_MEM=200
-# memory per concurrent user per instance (Mi)
-MEM_PER_CONC=3
-# base CPU millicores
-BASE_CPU=200
-CPU_PER_CONC=10
+BASE_MEM=200           # Mi base per instance
+MEM_PER_CONC=3         # Mi per concurrent user
+BASE_CPU=200           # millicores base
+CPU_PER_CONC=10        # millicores per concurrent user
 
-# compute per-replica
 MEM_PER_REPLICA=$((BASE_MEM + CONCURRENCY * MEM_PER_CONC))
 CPU_PER_REPLICA=$((BASE_CPU + CONCURRENCY * CPU_PER_CONC))
-# total
 TOTAL_MEM=$((MEM_PER_REPLICA * REPLICAS))
 TOTAL_CPU=$((CPU_PER_REPLICA * REPLICAS))
 
-jq -n \
-  --arg replicas "$REPLICAS" \
-  --argjson perReplicaMem "$MEM_PER_REPLICA" \
-  --argjson perReplicaCpu "$CPU_PER_REPLICA" \
-  --argjson totalMem "$TOTAL_MEM" \
-  --argjson totalCpu "$TOTAL_CPU" \
-  '{replicas: ($replicas|tonumber), per_replica: {memory_mi: $perReplicaMem, cpu_millicores: $perReplicaCpu}, total: {memory_mi: $totalMem, cpu_millicores: $totalCpu}}'
+# Output JSON
+cat <<EOF
+{
+  "replicas": ${REPLICAS},
+  "per_replica": {
+    "memory_mi": ${MEM_PER_REPLICA},
+    "cpu_millicores": ${CPU_PER_REPLICA}
+  },
+  "total": {
+    "memory_mi": ${TOTAL_MEM},
+    "cpu_millicores": ${TOTAL_CPU}
+  }
+}
+EOF
