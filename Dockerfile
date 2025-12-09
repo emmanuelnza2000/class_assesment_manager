@@ -1,5 +1,5 @@
 # Multi-stage build for optimized container size
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -10,14 +10,11 @@ COPY package*.json ./
 RUN npm ci
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 
 # Add non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nextjs -u 1001
-
-# Install build tools required for native modules like bcrypt
-RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
@@ -34,6 +31,9 @@ USER nextjs
 
 # Expose port
 EXPOSE 3000
+
+# Set environment variable
+ENV NODE_ENV=production
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
