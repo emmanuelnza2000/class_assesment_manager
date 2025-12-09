@@ -272,6 +272,7 @@ jobs:
         echo "tag=$TAG" >> $GITHUB_OUTPUT
 
     - name: Create & push git tag (if missing)
+      id: create_tag
       env:
         TAG: ${{ steps.tag.outputs.tag }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -279,12 +280,45 @@ jobs:
         git fetch --tags
         if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
           echo "Tag ${TAG} already exists, skipping tag creation."
+          echo "tag_created=0" >> $GITHUB_OUTPUT
         else
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${TAG}" -m "Release ${TAG}"
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${TAG}"
           echo "Created and pushed tag ${TAG}."
+          echo "tag_created=1" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create GitHub release (idempotent)
+      env:
+        TAG: ${{ steps.tag.outputs.tag }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        API_BASE="https://api.github.com/repos/${REPO}"
+        GET_URL="${API_BASE}/releases/tags/${TAG}"
+
+        echo "Checking for existing release for tag ${TAG}..."
+        http_status=$(curl -s -o /tmp/release.json -w "%{http_code}" -H "Authorization: token ${GITHUB_TOKEN}" "${GET_URL}" || true)
+
+        if [ "${http_status}" = "200" ]; then
+          echo "Release for ${TAG} already exists; skipping creation."
+          cat /tmp/release.json
+          exit 0
+        fi
+
+        echo "No existing release found (status ${http_status}). Creating release..."
+        CREATE_PAYLOAD=$(jq -nc --arg t "$TAG" --arg b "Automated release for $TAG" '{ tag_name: $t, name: ("Release " + $t), body: $b, draft: false, prerelease: false }')
+        resp=$(curl -s -o /tmp/create_resp.json -w "%{http_code}" -X POST -H "Authorization: token ${GITHUB_TOKEN}" -H "Content-Type: application/json" -d "$CREATE_PAYLOAD" "${API_BASE}/releases")
+        if [ "$resp" -ge 200 ] && [ "$resp" -lt 300 ]; then
+          echo "Release created successfully."
+          cat /tmp/create_resp.json
+        else
+          echo "Failed to create release (HTTP $resp). Response:"
+          cat /tmp/create_resp.json
+          exit 1
         fi
 
     - name: Set up Docker Buildx
@@ -318,14 +352,3 @@ jobs:
         docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" .
         docker push "${IMAGE}:${TAG}"
         docker push "${IMAGE}:latest"
-
-    - name: Create GitHub release (annotated)
-      uses: actions/create-release@v1
-      with:
-        tag_name: ${{ steps.tag.outputs.tag }}
-        release_name: Release ${{ steps.tag.outputs.tag }}
-        body: "Automated release for ${{ steps.tag.outputs.tag }}"
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
