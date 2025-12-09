@@ -1,0 +1,54 @@
+name: Alert-triggered scaling
+
+on:
+  repository_dispatch:
+    types: [prometheus_alert]
+
+jobs:
+  handle_alert:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG }}
+      K8S_NAMESPACE: default
+      DEPLOYMENT_NAME: classroom-manager
+      MAX_REPLICAS: 10
+    steps:
+      - name: Debug event
+        run: |
+          echo "Event payload:"
+          jq . <<< "${{ toJson(github.event) }}" || true
+
+      - name: Setup kubectl
+        if: env.KUBE_CONFIG_B64 != ''
+        run: |
+          set -euo pipefail
+          echo "${KUBE_CONFIG_B64}" | base64 --decode > kubeconfig
+          export KUBECONFIG=$PWD/kubeconfig
+          kubectl version --client
+
+      - name: Parse alert and act
+        if: env.KUBE_CONFIG_B64 != ''
+        run: |
+          set -euo pipefail
+          # repository_dispatch client_payload is available in event JSON
+          ALERTNAME=$(jq -r '.client_payload.alerts[0].labels.alertname // "unknown"' "$GITHUB_EVENT_PATH")
+          echo "Alert name: $ALERTNAME"
+
+          if [ "$ALERTNAME" = "HighCPUUsage" ]; then
+            echo "Handling HighCPUUsage: scaling up deployment ${DEPLOYMENT_NAME}"
+            CURRENT=$(kubectl -n ${K8S_NAMESPACE} get deploy ${DEPLOYMENT_NAME} -o jsonpath='{.status.replicas}' || echo 1)
+            CURRENT=${CURRENT:-1}
+            NEW=$(( CURRENT * 2 ))
+            if [ "$NEW" -gt "$MAX_REPLICAS" ]; then NEW=$MAX_REPLICAS; fi
+            if [ "$NEW" -le "$CURRENT" ]; then
+              echo "No increase required (current: $CURRENT, computed: $NEW)."
+            else
+              echo "Scaling ${DEPLOYMENT_NAME} from $CURRENT -> $NEW"
+              kubectl -n ${K8S_NAMESPACE} scale deployment ${DEPLOYMENT_NAME} --replicas=${NEW}
+              kubectl -n ${K8S_NAMESPACE} rollout status deployment/${DEPLOYMENT_NAME} --timeout=120s || true
+            fi
+          else
+            echo "No handler for alert: $ALERTNAME. You can add more conditions (e.g., ErrorBudgetBurn)."
+          fi

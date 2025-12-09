@@ -252,6 +252,32 @@ Secrets / production:
 - Use Kubernetes Secrets for Grafana admin password and Elasticsearch credentials.
 - Adjust resource requests/limits in the manifests for your environment.
 
+## Autoscaling & Feedback Loop
+
+This project contains examples to demonstrate autoscaling (HPA) and a feedback loop from monitoring alerts to CI actions.
+
+Files introduced:
+- deploy/k8s/hpa.yaml — Kubernetes Horizontal Pod Autoscaler (HPA) for classroom-manager (CPU-based).
+- deploy/monitoring/prometheus/alert-rules.yaml — alerts including HighCPUUsage and ErrorBudgetBurn.
+- deploy/monitoring/alertmanager/alertmanager.yml — Alertmanager config with a webhook receiver placeholder.
+- .github/workflows/alert-trigger.yml — GitHub Actions workflow that listens for repository_dispatch events (type: prometheus_alert) and scales the deployment via kubectl.
+
+How to wire Alertmanager -> GitHub Actions:
+1. Deploy Alertmanager and configure a webhook receiver that forwards alerts to a small webhook (or directly to GitHub) which calls:
+   POST https://api.github.com/repos/:owner/:repo/dispatches
+   with body:
+   { "event_type": "prometheus_alert", "client_payload": { "alerts": [ ...Alertmanager payload... ] } }
+   Note: repository_dispatch requires a Personal Access Token with repo scope.
+2. Alternatively deploy a lightweight service (example: an Express app) that receives Alertmanager webhook_posts and then uses a GitHub token (stored securely in that service) to call repository_dispatch.
+3. Ensure Actions repo secrets:
+   - KUBE_CONFIG (base64-encoded kubeconfig) — used by alert-trigger.yml to run kubectl commands.
+   - DOCKERHUB_* etc (as before).
+   - For the webhook/GitHub dispatch service, store GH_TOKEN in that service environment.
+
+Notes:
+- The sample alert-trigger workflow demonstrates safe scaling: it doubles replicas on HighCPUUsage up to a configured maximum.
+- In production prefer: Prometheus Operator / kube-prometheus-stack, external Alertmanager routing, and better auth/secret handling.
+
 ## 📋 Error Budget Policy
 
 ### Service Level Objectives (SLOs):

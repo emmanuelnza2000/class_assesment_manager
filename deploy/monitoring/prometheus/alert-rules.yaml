@@ -20,11 +20,30 @@ groups:
           description: "More than 5 restarts in 15m across pods."
 
       - alert: High5xxErrorRate
-        # Requires your application to expose http_requests_total{code=~"5.."} or similar
-        expr: rate(http_requests_total{code=~"5.."}[5m]) / rate(http_requests_total[code!~"5.."][5m] + http_requests_total{code=~"5.."}[5m]) > 0.05
+        expr: rate(http_requests_total{code=~"5.."}[5m]) > 0
         for: 5m
         labels:
           severity: critical
         annotations:
           summary: "High 5xx error rate"
-          description: "5xx error rate > 5% over the last 5m (requires app instrumentation)."
+          description: "Elevated 5xx error rate detected (requires app instrumentation)."
+
+      # CPU-based scaling alert (example)
+      - alert: HighCPUUsage
+        expr: avg by (deployment) (rate(container_cpu_usage_seconds_total[2m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on deployment {{ $labels.deployment }}"
+          description: "Average CPU usage for deployment {{ $labels.deployment }} is high (>50% cpu cores averaged) for 2m. Consider scaling."
+
+      # Example error-budget burn alert (placeholder, requires SLO recording rules)
+      - alert: ErrorBudgetBurn
+        expr: (sum(rate(http_requests_total{code!~"5.."}[30d])) / sum(rate(http_requests_total[30d]))) < 0.999
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Error budget is burning"
+          description: "Service is using error budget fast; investigate and consider rolling back or scaling."

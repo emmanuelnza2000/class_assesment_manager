@@ -1,9 +1,22 @@
 global:
   resolve_timeout: 5m
+
 route:
   receiver: "default"
+  group_wait: 10s
+  group_interval: 10m
+  repeat_interval: 1h
+
 receivers:
   - name: "default"
-    # Configure actual integrations here (slack_configs, email_configs, pagerduty_configs)
+    # keep local/noop or add integrations (slack/email) here
     webhook_configs:
-      - url: "http://localhost:9001/"  # placeholder; replace with real receiver or remove
+      - url: "http://localhost:9001/"  # placeholder: local receiver for debugging
+
+  - name: "github-dispatch"
+    webhook_configs:
+      - url: "https://your-alert-webhook.example.com/github-dispatch"
+        # Optional: set headers if your webhook requires auth
+        # http_config:
+        #   bearer_token: /etc/alertmanager/secrets/github_token
+        # The webhook should translate Alertmanager payload -> GitHub repository_dispatch
