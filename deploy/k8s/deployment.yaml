@@ -2,8 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: classroom-manager
+  namespace: 25rp18224-nzayisenga
   labels:
     app: classroom-manager
+    devops_id: "25RP18224-nzayisenga"
 spec:
   replicas: 3
   strategy:
@@ -24,20 +26,28 @@ spec:
           image: "{{IMAGE}}:{{TAG}}"
           ports:
             - containerPort: 3000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: classroom-app-config
+            - secretRef:
+                name: classroom-app-secret
           readinessProbe:
             httpGet:
               path: /health
               port: 3000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 2
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /health
               port: 3000
-            initialDelaySeconds: 20
+            initialDelaySeconds: 30
             periodSeconds: 20
             timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             requests:
               memory: "256Mi"
@@ -45,3 +55,15 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - classroom-manager
+                topologyKey: kubernetes.io/hostname

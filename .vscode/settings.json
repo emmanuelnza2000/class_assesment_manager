@@ -1,0 +1,5 @@
+{
+    "yaml.schemas": {
+        "kubernetes://schema/v1%40service": "file:///home/vboxuser/Downloads/class_assesment_manager/deploy/monitoring/prometheus/k8s-prometheus.yaml"
+    }
+}

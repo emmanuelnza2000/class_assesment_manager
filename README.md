@@ -396,22 +396,19 @@ Last updated: January 2024
 
 # Classroom Assessment Manager
 
+## Student DevOps Identifier (use this consistently)
+
+Unique identifier: 25RP18224-nzayisenga  
+Kubernetes namespace (lowercase): 25rp18224-nzayisenga  
+Docker image repository: nzayisenga/25rp18224-nzayisenga
+
+Where the identifier is applied:
+- Repository / Docker image: nzayisenga/25rp18224-nzayisenga
+- Kubernetes namespace: 25rp18224-nzayisenga
+- Monitoring namespace: monitoring-25rp18224-nzayisenga
+- CI pipeline builds/pushes the image and deploys to the namespace above.
+
 Quick notes:
-- CI runs tests, lints and builds a Docker image.
-- Release job reads version from package.json, tags the repo and (optionally) pushes Docker images.
-- Deploy job can apply Kubernetes manifests or deploy a Docker Swarm stack and supports rolling updates or blue-green (set via secrets).
-
-Required repository secrets (optional for full automation):
-- GITHUB_TOKEN (provided by Actions)
-- For Docker publishing (optional):
-  - DOCKERHUB_USERNAME and DOCKERHUB_TOKEN
-  - OR DOCKER_REGISTRY, DOCKER_USERNAME and DOCKER_PASSWORD
-- For Kubernetes deploy:
-  - KUBE_CONFIG (base64-encoded kubeconfig)
-  - Optionally USE_BLUE_GREEN=true to enable blue/green switching
-- For Swarm deploy:
-  - Ensure the runner can reach the Swarm manager; use DOCKER_HOST / DOCKER_TLS_* if needed.
-
-Usage:
-- Update package.json version, push to `main` — the workflow will create a tag `v<version>` and a GitHub release.
-- To enable Docker image publish, add Docker secrets above.
+- Ensure you set GitHub Actions secrets: DOCKERHUB_USERNAME (nzayisenga), DOCKERHUB_TOKEN, and KUBE_CONFIG (base64 kubeconfig).
+- Use the namespace `25rp18224-nzayisenga` when running kubectl apply commands.
+- The CI pipeline and manifests were updated to use the identifier; verify and adapt any environment-specific values before deploying.

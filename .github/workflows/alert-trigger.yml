@@ -11,7 +11,7 @@ jobs:
       contents: read
     env:
       KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG }}
-      K8S_NAMESPACE: default
+      K8S_NAMESPACE: 25rp18224-nzayisenga
       DEPLOYMENT_NAME: classroom-manager
       MAX_REPLICAS: 10
     steps:

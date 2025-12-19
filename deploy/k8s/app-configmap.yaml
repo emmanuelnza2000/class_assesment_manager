@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: classroom-app-config
+  namespace: classroom-assessment
+data:
+  NODE_ENV: "production"
+  DB_HOST: "mysql.classroom-assessment.svc.cluster.local"
+  DB_PORT: "3306"
+  DB_NAME: "classroom_db"
+  DB_USER: "root"

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: alertmanager-config
-  namespace: monitoring
+  namespace: monitoring-25rp18224-nzayisenga
 data:
   alertmanager.yml: |
     # See file: deploy/monitoring/alertmanager/alertmanager.yml
@@ -19,7 +19,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: alertmanager
-  namespace: monitoring
+  namespace: monitoring-25rp18224-nzayisenga
 spec:
   replicas: 1
   selector:
@@ -47,7 +47,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: alertmanager
-  namespace: monitoring
+  namespace: monitoring-25rp18224-nzayisenga
 spec:
   type: ClusterIP
   ports:

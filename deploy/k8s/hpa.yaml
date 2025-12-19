@@ -2,7 +2,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: classroom-manager-hpa
-  namespace: default
+  namespace: 25rp18224-nzayisenga
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -17,6 +17,12 @@ spec:
         target:
           type: Utilization
           averageUtilization: 50
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 30
